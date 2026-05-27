@@ -7,7 +7,50 @@ const AdvertismentMsg = extern struct {
     nonce: u32,
 };
 
-fn listenBroadcast(io: std.Io, ip_list: *const std.ArrayList(u32)) !void {
+var advertising: bool = true;
+
+fn advertize(io: std.Io) void {
+    const address = net.IpAddress.parseIp4("0.0.0.0", 4444) catch |err| {
+        std.log.err("Error when parsing address: {s}", .{@errorName(err)});
+        std.process.exit(1);
+    };
+    const braodcast = net.IpAddress.parseIp4("255.255.255.255", 5005) catch |err| {
+        std.log.err("Error when parsing address: {s}", .{@errorName(err)});
+        std.process.exit(1);
+    };
+
+    const socket = address.bind(io, .{.protocol = .udp, .mode = .dgram, .allow_broadcast = true}) catch |err| {
+        std.log.err("Error when binding address: {s}", .{@errorName(err)});
+        std.process.exit(1);
+    };
+
+
+    var prng: std.Random.DefaultPrng = .init(1);
+
+    const rand = prng.random();
+
+    var msg = AdvertismentMsg{
+        .port = 4444,
+        .nonce = rand.int(u32)
+    };
+
+    const data: *[@sizeOf(AdvertismentMsg)]u8 = @ptrCast(@alignCast(&msg));
+
+    msg.port = 4445;
+
+    while (advertising) {
+        socket.send(io, &braodcast, data) catch |err| {
+            std.log.err("Error while sending: {s}", .{@errorName(err)});
+            std.process.exit(1);
+        };
+        io.sleep(std.Io.Duration.fromMilliseconds(500), .awake) catch {
+            break;
+        };
+    }
+    socket.close(io);
+}
+
+fn listenBroadcast(io: std.Io, ip_list: std.ArrayList(u32)) !void {
     const address = try net.IpAddress.parseIp4("0.0.0.0", 5005);
 
     const socket = try address.bind(io, .{.protocol = .udp, .mode = .dgram});
@@ -101,39 +144,8 @@ pub fn main(init: std.process.Init) void {
         std.process.exit(1);
     };
 
-     _ = init.io.async(listenBroadcast, .{ init.io, &ip_list });
+     _ = init.io.async(listenBroadcast, .{ init.io, ip_list });
      _ = init.io.async(listenTcp, .{ init.io });
+     _ = init.io.async(advertize, .{ init.io });
 
-    const address = net.IpAddress.parseIp4("0.0.0.0", 4444) catch |err| {
-        std.log.err("Error when parsing address: {s}", .{@errorName(err)});
-        std.process.exit(1);
-    };
-    const braodcast = net.IpAddress.parseIp4("255.255.255.255", 5005) catch |err| {
-        std.log.err("Error when parsing address: {s}", .{@errorName(err)});
-        std.process.exit(1);
-    };
-
-    const socket = address.bind(init.io, .{.protocol = .udp, .mode = .dgram, .allow_broadcast = true}) catch |err| {
-        std.log.err("Error when binding address: {s}", .{@errorName(err)});
-        std.process.exit(1);
-    };
-
-
-    var prng: std.Random.DefaultPrng = .init(1);
-
-    const rand = prng.random();
-
-    var msg = AdvertismentMsg{
-        .port = 4444,
-        .nonce = rand.int(u32)
-    };
-
-    const data: *[@sizeOf(AdvertismentMsg)]u8 = @ptrCast(@alignCast(&msg));
-
-    msg.port = 4445;
-
-    socket.send(init.io, &braodcast, data) catch |err| {
-        std.log.err("Error while sending: {s}", .{@errorName(err)});
-        std.process.exit(1);
-    };
 }
