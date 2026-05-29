@@ -1,13 +1,20 @@
 const std = @import("std");
 const net = std.Io.net;
 
+const SIGNATURE: [4]u8 = [4]u8{'H', 'E', 'R', 'M'};
+
 const AdvertismentMsg = extern struct {
     signature: [4]u8 = [_]u8{'H', 'E', 'R', 'M'},
     port: u16,
-    nonce: u32,
+};
+
+const NewConnMsg = struct {
+    port: u16,
+    ip: u32
 };
 
 var advertising: bool = true;
+var ownIp: u32 = 0;
 
 fn advertize(io: std.Io) void {
     const address = net.IpAddress.parseIp4("0.0.0.0", 4444) catch |err| {
@@ -24,14 +31,8 @@ fn advertize(io: std.Io) void {
         std.process.exit(1);
     };
 
-
-    var prng: std.Random.DefaultPrng = .init(1);
-
-    const rand = prng.random();
-
     var msg = AdvertismentMsg{
         .port = 4444,
-        .nonce = rand.int(u32)
     };
 
     const data: *[@sizeOf(AdvertismentMsg)]u8 = @ptrCast(@alignCast(&msg));
@@ -50,7 +51,7 @@ fn advertize(io: std.Io) void {
     socket.close(io);
 }
 
-fn listenBroadcast(io: std.Io, ip_list: std.ArrayList(u32)) !void {
+fn listenBroadcast(io: std.Io, ip_list: std.ArrayList(u32), queue: *std.Io.Queue(NewConnMsg)) !void {
     const address = try net.IpAddress.parseIp4("0.0.0.0", 5005);
 
     const socket = try address.bind(io, .{.protocol = .udp, .mode = .dgram});
@@ -61,14 +62,23 @@ fn listenBroadcast(io: std.Io, ip_list: std.ArrayList(u32)) !void {
         const conn = try socket.receive(io, &buffer);
         const ip: u32 = std.mem.readInt(u32, &conn.from.ip4.bytes, .native);
 
-        for (ip_list.items) |test_ip| {
-            if (test_ip == ip) continue :listenLoop;
-        }
-
         const msg: *AdvertismentMsg = @ptrCast(@alignCast(&buffer));
 
-        std.debug.print("recived from: {d}.{d}.{d}.{d} ", .{conn.from.ip4.bytes[0], conn.from.ip4.bytes[1], conn.from.ip4.bytes[2], conn.from.ip4.bytes[3]});
-        std.debug.print("port: {d}, nonde: {d}\n", .{msg.port, msg.nonce});
+        if (!std.mem.eql(u8, &SIGNATURE, &msg.signature)) continue :listenLoop;
+
+        for (ip_list.items) |test_ip| {
+            if (test_ip == ip) {
+                ownIp = ip;
+                continue :listenLoop;
+            }
+        }
+
+
+
+        std.log.info("recived from: {d}.{d}.{d}.{d} ", .{conn.from.ip4.bytes[0], conn.from.ip4.bytes[1], conn.from.ip4.bytes[2], conn.from.ip4.bytes[3]});
+        std.log.info("port: {d}\n", .{msg.port});
+
+        try queue.putOne(io, .{ .ip = ip, .port = msg.port });
     }
 }
 
@@ -144,8 +154,51 @@ pub fn main(init: std.process.Init) void {
         std.process.exit(1);
     };
 
-     _ = init.io.async(listenBroadcast, .{ init.io, ip_list });
+    var backlog: [10]NewConnMsg = undefined;
+    var queue: std.Io.Queue(NewConnMsg) = .init(&backlog);
+
+     _ = init.io.async(listenBroadcast, .{ init.io, ip_list, &queue });
      _ = init.io.async(listenTcp, .{ init.io });
-     _ = init.io.async(advertize, .{ init.io });
+     _ = init.io.async(advertize, .{ init.io});
+
+     while(true) {
+        const newConn = queue.getOne(init.io) catch |err| {
+            std.log.err("Error while reading from queue: {s}", .{@errorName(err)});
+            std.process.exit(1);
+        };
+
+        if (ownIp == 0) continue;
+        
+        advertising = false;
+
+        if (newConn.ip > ownIp) {
+            std.log.info("Connecting to: {d}.{d}.{d}.{d}:{d}", .{
+                (newConn.ip & (0xFF)),
+                (newConn.ip & (0xFF << 8)) >> 8,
+                (newConn.ip & (0xFF << 16)) >> 16,
+                (newConn.ip & (0xFF << 24)) >> 24,
+                newConn.port
+            });
+
+            const new_addr: net.IpAddress = .{ 
+                .ip4 = .{ 
+                    .bytes = .{  
+                        @intCast(newConn.ip & (0xFF)),
+                        @intCast((newConn.ip & (0xFF << 8)) >> 8),
+                        @intCast((newConn.ip & (0xFF << 16)) >> 16),
+                        @intCast((newConn.ip & (0xFF << 24)) >> 24),
+                    },
+
+                    .port = newConn.port
+                }
+            };
+
+            _ = new_addr.connect(init.io, .{ .mode = .stream, .protocol = .tcp }) catch |err| {
+                std.log.err("Error wihle connecting to server: {s}", .{@errorName(err)});
+                std.process.exit(1);
+            };
+
+        }
+     }
 
 }
