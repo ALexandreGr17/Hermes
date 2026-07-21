@@ -20,6 +20,8 @@ pub fn listenBroadcast(id: usize, io: std.Io, ip_list: std.ArrayList(u32), queue
         return std.Io.Cancelable.Canceled;
     };
 
+    logger.log("UDP listen", .Info, "Listening on port: {}", .{5005});
+
      listenLoop: while (true) {
         var buffer: [@sizeOf(AdvertismentMsg)]u8 align(@alignOf(AdvertismentMsg)) = undefined;
 
@@ -83,7 +85,7 @@ pub fn advertize(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
     };
 
     const data: *[@sizeOf(AdvertismentMsg)]u8 = @ptrCast(@alignCast(&msg));
-
+    logger.log("UDP Advertisment", .Info, "Starting advertisment", .{});
     while (networking.advertising) {
         socket.send(io, &braodcast, data) catch |err| switch (err) {
             std.Io.Cancelable.Canceled => {

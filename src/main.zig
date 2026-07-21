@@ -9,9 +9,11 @@ const net = std.Io.net;
 
 pub fn main(init: std.process.Init) void {
 
-    var log_file = std.Io.Dir.openFileAbsolute(init.io, "/tmp/log", .{ .mode = .write_only }) catch |err| {
-        std.log.err("Unable to open file /tmp/log: {s}", .{@errorName(err)});
-        std.process.exit(1);
+    var log_file = std.Io.Dir.openFileAbsolute(init.io, "/tmp/log", .{ .mode = .write_only }) catch |err| blk: {
+        break :blk std.Io.Dir.createFileAbsolute(init.io, "/tmp/log", .{ .truncate = false }) catch |err2| {
+            std.log.err("Unable to open file /tmp/log: {s} or create it: {s}", .{@errorName(err), @errorName(err2)});
+            std.process.exit(1);
+        };
     };
 
     const logger: Logger = .{
