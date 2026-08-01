@@ -62,44 +62,9 @@ pub fn main(init: std.process.Init) void {
         &logger
     });
 
-     while(true) {
-        const newConn = queue.getOne(init.io) catch |err| {
-            logger.log("Queue", .Error, "Error while reading from queue: {s}", .{@errorName(err)});
-            std.process.exit(1);
-        };
-
-        if (networking.ownIp == 0) continue;
-
-        networking.advertising = false;
-
-        if (newConn.ip > networking.ownIp) {
-            logger.log("TCP", .Info, "Connecting to: {d}.{d}.{d}.{d}:{d}", .{
-                (newConn.ip & (0xFF)),
-                (newConn.ip & (0xFF << 8)) >> 8,
-                (newConn.ip & (0xFF << 16)) >> 16,
-                (newConn.ip & (0xFF << 24)) >> 24,
-                newConn.port
-            });
-
-            const new_addr: net.IpAddress = .{ 
-                .ip4 = .{ 
-                    .bytes = .{  
-                        @intCast(newConn.ip & (0xFF)),
-                        @intCast((newConn.ip & (0xFF << 8)) >> 8),
-                        @intCast((newConn.ip & (0xFF << 16)) >> 16),
-                        @intCast((newConn.ip & (0xFF << 24)) >> 24),
-                    },
-
-                    .port = newConn.port
-                }
-            };
-
-            _ = new_addr.connect(init.io, .{ .mode = .stream, .protocol = .tcp }) catch |err| {
-                logger.log("TCP", .Error, "Error wihle connecting to server: {s}", .{@errorName(err)});
-                std.process.exit(1);
-            };
-
-        }
-     }
-
+    group.async(init.io, networking.handshakeTcp, .{
+        init.io,
+        &queue,
+        &logger
+    });
 }

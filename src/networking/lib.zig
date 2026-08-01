@@ -16,6 +16,7 @@ pub const listenBroadcast = @import("udp.zig").listenBroadcast;
 pub const advertize = @import("udp.zig").advertize;
 
 pub const listenTcp = @import("tcp.zig").listenTcp;
+pub const handshakeTcp = @import("tcp.zig").handshakeTcp;
 
 
 pub fn IpAddressToString(addr: *const net.IpAddress, buffer: []u8) !void {
