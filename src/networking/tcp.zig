@@ -7,7 +7,7 @@ const CriticalError = @import("../supervisor.zig").CriticalError;
 const Logger = @import("../log.zig").Logger;
 
 pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError), logger: *const Logger) std.Io.Cancelable!void {
-    const addr = net.IpAddress.parseIp4("192.168.1.52", 4445) catch |err| {
+    const addr = net.IpAddress.parseIp4("0.0.0.0", 4445) catch |err| {
         logger.log("TCP listen", .Error, "Error while parsing address 192.168.1.52:4445: {s}", .{@errorName(err)});
         error_queue.putOne(io, .{ .err = err, .worker = id }) catch {
             return std.Io.Cancelable.Canceled;
@@ -28,6 +28,8 @@ pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
             return std.Io.Cancelable.Canceled;
         },
     };
+
+    logger.log("TCP listen", .Info, "listening on tcp port {}", .{4445});
 
     acceptLoop: while (true) {
         const client_socket = socket_server.accept(io) catch |err| switch (err) {
@@ -51,6 +53,7 @@ pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
 }
 
 pub fn handshakeTcp(io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *const Logger) !void {
+        logger.log("test", .Debug, "New msg received", .{});
      handshakeLoop: while(true) {
         const newConn = conn_queue.getOne(io) catch {
             return std.Io.Cancelable.Canceled;
