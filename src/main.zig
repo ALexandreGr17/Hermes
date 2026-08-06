@@ -16,17 +16,18 @@ pub fn main(init: std.process.Init) void {
         };
     };
 
-    const logger: Logger = .{
+    var logger: Logger = .{
         .file = &log_file,
         .io = init.io,
         .secondary = @constCast(&std.Io.File.stdout()),
-        .level = .Debug
+        .level = .Debug,
+        .mutex = std.Io.Mutex.init,
     };
 
-    logger.log("Hermes", .Info, "Hermes is starting...", .{});
+    logger.log("Hermes", .Info, "Hermes is starting...", .{}) catch return;
 
     const ip_list = networking.getIp(init.arena.allocator()) catch |err| {
-        logger.log("Ip", .Error, "Error while getting Ip: {s}", .{@errorName(err)});
+        logger.log("Ip", .Error, "Error while getting Ip: {s}", .{@errorName(err)}) catch return;
         std.process.exit(1);
     };
 

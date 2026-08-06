@@ -15,9 +15,12 @@ pub const Logger = struct {
     file: *std.Io.File,
     secondary: ?*std.Io.File,
     io: std.Io,
+    mutex: std.Io.Mutex,
 
-    pub fn log(self: *const Logger, tag: []const u8, level: LogLevel, comptime fmt: []const u8, args: anytype) void {
+    pub fn log(self: *Logger, tag: []const u8, level: LogLevel, comptime fmt: []const u8, args: anytype) std.Io.Cancelable!void {
         if (@intFromEnum(level) > @intFromEnum(self.level)) return;
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
         var buffer: [10]u8 = undefined;
         var writer = self.file.writer(self.io, &buffer);
 

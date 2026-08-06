@@ -36,7 +36,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.linkSystemLibrary("fuse3", .{ .use_pkg_config = .yes });
-
+    b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());

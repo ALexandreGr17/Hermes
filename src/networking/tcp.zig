@@ -6,9 +6,11 @@ const NewConnMsg = networking.Msg.NewConnMsg;
 const CriticalError = @import("../supervisor.zig").CriticalError;
 const Logger = @import("../log.zig").Logger;
 
-pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError), logger: *const Logger) std.Io.Cancelable!void {
+pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError), logger: *Logger) std.Io.Cancelable!void {
     const addr = net.IpAddress.parseIp4("0.0.0.0", 4445) catch |err| {
-        logger.log("TCP listen", .Error, "Error while parsing address 192.168.1.52:4445: {s}", .{@errorName(err)});
+        logger.log("TCP listen", .Error, "Error while parsing address 192.168.1.52:4445: {s}", .{@errorName(err)}) catch {
+            return std.Io.Cancelable.Canceled;
+        };
         error_queue.putOne(io, .{ .err = err, .worker = id }) catch {
             return std.Io.Cancelable.Canceled;
         };
@@ -21,7 +23,9 @@ pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
         },
 
         else => {
-            logger.log("TCP listen", .Error, "Error while listening to address 192.168.1.52:4445: {s}", .{@errorName(err)});
+            logger.log("TCP listen", .Error, "Error while listening to address 192.168.1.52:4445: {s}", .{@errorName(err)}) catch {
+                return std.Io.Cancelable.Canceled;
+            };
             error_queue.putOne(io, .{ .err = err, .worker = id }) catch {
                 return std.Io.Cancelable.Canceled;
             };
@@ -29,7 +33,9 @@ pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
         },
     };
 
-    logger.log("TCP listen", .Info, "listening on tcp port {}", .{4445});
+    logger.log("TCP listen", .Info, "listening on tcp port {}", .{4445}) catch {
+        return std.Io.Cancelable.Canceled;
+    };
 
     acceptLoop: while (true) {
         const client_socket = socket_server.accept(io) catch |err| switch (err) {
@@ -37,23 +43,31 @@ pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
                 return std.Io.Cancelable.Canceled;
             },
             else => {
-                logger.log("TCP listen", .Warning, "Failed to accept on socket: {s}", .{@errorName(err)});
+                logger.log("TCP listen", .Warning, "Failed to accept on socket: {s}", .{@errorName(err)}) catch {
+                    return std.Io.Cancelable.Canceled;
+                };
                 try io.sleep(std.Io.Duration.fromMilliseconds(500), .awake);
                 continue :acceptLoop;
             },
         };
         var ipstr: [15]u8 = undefined;
         IpAddressToString(&client_socket.socket.address, &ipstr) catch |err| {
-            logger.log("TCP listen", .Warning, "Error while formating an address {s}", .{@errorName(err)});
+            logger.log("TCP listen", .Warning, "Error while formating an address {s}", .{@errorName(err)}) catch {
+                return std.Io.Cancelable.Canceled;
+            };
         };
 
-        logger.log("TCP listen", .Info, "New Connection from: {s}:{d}\n", .{ipstr, client_socket.socket.address.getPort()});
+        logger.log("TCP listen", .Info, "New Connection from: {s}:{d}\n", .{ipstr, client_socket.socket.address.getPort()}) catch {
+            return std.Io.Cancelable.Canceled;
+        };
     }
 
 }
 
-pub fn handshakeTcp(io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *const Logger) !void {
-        logger.log("test", .Debug, "New msg received", .{});
+pub fn handshakeTcp(io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *Logger) !void {
+    logger.log("test", .Debug, "New msg received", .{}) catch {
+        return std.Io.Cancelable.Canceled;
+    };
      handshakeLoop: while(true) {
         const newConn = conn_queue.getOne(io) catch {
             return std.Io.Cancelable.Canceled;
@@ -69,7 +83,9 @@ pub fn handshakeTcp(io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *
                 (newConn.ip & (0xFF << 16)) >> 16,
                 (newConn.ip & (0xFF << 24)) >> 24,
                 newConn.port
-            });
+            }) catch {
+                return std.Io.Cancelable.Canceled;
+            };
 
             const new_addr: net.IpAddress = .{ 
                 .ip4 = .{ 
@@ -92,7 +108,9 @@ pub fn handshakeTcp(io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *
                 else => {
                     var buffer: [15]u8 = undefined;
                     IpAddressToString(&new_addr, &buffer) catch {};
-                    logger.log("TCP handshake", .Error , "Error while connecting to address {s}: {s}", .{buffer, @errorName(err)});
+                    logger.log("TCP handshake", .Error , "Error while connecting to address {s}: {s}", .{buffer, @errorName(err)}) catch {
+                        return std.Io.Cancelable.Canceled;
+                    };
                     continue :handshakeLoop;
                 },
             };
