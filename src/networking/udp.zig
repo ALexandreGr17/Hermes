@@ -8,6 +8,7 @@ const CriticalError = @import("../supervisor.zig").CriticalError;
 const networking = @import("lib.zig");
 
 pub fn listenBroadcast(id: usize, io: std.Io, ip_list: std.ArrayList(u32), queue: *std.Io.Queue(NewConnMsg), error_queue: *std.Io.Queue(CriticalError),logger: *Logger) std.Io.Cancelable!void {
+    try logger.log("TASK", .Debug, "Task {} started", .{id});
     const address = net.IpAddress.parseIp4("0.0.0.0", 5005) catch |err| {
         logger.log("UDP listen", .Error, "Error while creating address struct {s}", .{@errorName(err)}) catch {
             return std.Io.Cancelable.Canceled;
@@ -73,6 +74,7 @@ pub fn listenBroadcast(id: usize, io: std.Io, ip_list: std.ArrayList(u32), queue
 
 
 pub fn advertize(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError),logger: *Logger) !void {
+    try logger.log("TASK", .Debug, "Task {} started", .{id});
     const address = net.IpAddress.parseIp4("0.0.0.0", 4444) catch |err| {
         logger.log("UDP Advertisment", .Error, "Error when parsing address 0.0.0.0:4444: {s}", .{@errorName(err)}) catch {
             return std.Io.Cancelable.Canceled;
@@ -104,7 +106,8 @@ pub fn advertize(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
     logger.log("UDP Advertisment", .Info, "Starting advertisment", .{}) catch {
         return std.Io.Cancelable.Canceled;
     };
-    while (networking.advertising) {
+
+    while (true) {
         socket.send(io, &braodcast, data) catch |err| switch (err) {
             std.Io.Cancelable.Canceled => {
                 return std.Io.Cancelable.Canceled;

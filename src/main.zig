@@ -9,8 +9,12 @@ const net = std.Io.net;
 
 pub fn main(init: std.process.Init) void {
 
-    var log_file = std.Io.Dir.openFileAbsolute(init.io, "/tmp/log", .{ .mode = .write_only }) catch |err| blk: {
-        break :blk std.Io.Dir.createFileAbsolute(init.io, "/tmp/log", .{ .truncate = false }) catch |err2| {
+    var threaded = std.Io.Threaded.init(init.gpa, .{ .async_limit = std.Io.Limit.limited(10) });
+    defer threaded.deinit();
+    const io = threaded.io();
+
+    var log_file = std.Io.Dir.openFileAbsolute(io, "/tmp/log", .{ .mode = .write_only }) catch |err| blk: {
+        break :blk std.Io.Dir.createFileAbsolute(io, "/tmp/log", .{ .truncate = false }) catch |err2| {
             std.log.err("Unable to open file /tmp/log: {s} or create it: {s}", .{@errorName(err), @errorName(err2)});
             std.process.exit(1);
         };
@@ -18,7 +22,7 @@ pub fn main(init: std.process.Init) void {
 
     var logger: Logger = .{
         .file = &log_file,
-        .io = init.io,
+        .io = io,
         .secondary = @constCast(&std.Io.File.stdout()),
         .level = .Debug,
         .mutex = std.Io.Mutex.init,
@@ -38,34 +42,38 @@ pub fn main(init: std.process.Init) void {
 
     var group: std.Io.Group = .init;
 
-    _ = init.io.async(supervisor.supervisor, .{init.io, &logger, &error_queue, &group});
+    _ = io.async(supervisor.supervisor, .{io, &logger, &error_queue, &group});
 
-    group.async(init.io, networking.listenBroadcast, .{
+    group.async(io, networking.listenBroadcast, .{
         0,
-        init.io,
+        io,
         ip_list,
         &queue,
         &error_queue,
         &logger
     });
 
-    group.async(init.io, networking.listenTcp, .{
+    group.async(io, networking.listenTcp, .{
         1,
-        init.io,
+        io,
         &error_queue,
         &logger
     });
 
-    group.async(init.io, networking.advertize, .{
+
+    group.async(io, networking.advertize, .{
         2,
-        init.io,
+        io,
         &error_queue,
         &logger
     });
 
-    group.async(init.io, networking.handshakeTcp, .{
-        init.io,
+    group.async(io, networking.handshakeTcp, .{
+        3,
+        io,
         &queue,
         &logger
     });
+
+    group.await(io) catch return;
 }

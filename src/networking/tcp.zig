@@ -7,6 +7,7 @@ const CriticalError = @import("../supervisor.zig").CriticalError;
 const Logger = @import("../log.zig").Logger;
 
 pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError), logger: *Logger) std.Io.Cancelable!void {
+    try logger.log("TASK", .Debug, "Task {} started", .{id});
     const addr = net.IpAddress.parseIp4("0.0.0.0", 4445) catch |err| {
         logger.log("TCP listen", .Error, "Error while parsing address 192.168.1.52:4445: {s}", .{@errorName(err)}) catch {
             return std.Io.Cancelable.Canceled;
@@ -64,8 +65,8 @@ pub fn listenTcp(id: usize, io: std.Io, error_queue: *std.Io.Queue(CriticalError
 
 }
 
-pub fn handshakeTcp(io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *Logger) !void {
-    logger.log("test", .Debug, "New msg received", .{}) catch {
+pub fn handshakeTcp(id: usize, io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *Logger) !void {
+    logger.log("TASK", .Debug, "Task {} started", .{id}) catch {
         return std.Io.Cancelable.Canceled;
     };
      handshakeLoop: while(true) {
@@ -75,9 +76,10 @@ pub fn handshakeTcp(io: std.Io, conn_queue: *std.Io.Queue(NewConnMsg), logger: *
         if (networking.ownIp == 0) continue;
 
         networking.advertising = false;
+        try logger.log("TCP handshake", .Debug, "stopping advertisment", .{});
 
         if (newConn.ip > networking.ownIp) {
-            logger.log("TCP", .Info, "Connecting to: {d}.{d}.{d}.{d}:{d}", .{
+            logger.log("TCP handshake", .Info, "Connecting to: {d}.{d}.{d}.{d}:{d}", .{
                 (newConn.ip & (0xFF)),
                 (newConn.ip & (0xFF << 8)) >> 8,
                 (newConn.ip & (0xFF << 16)) >> 16,
